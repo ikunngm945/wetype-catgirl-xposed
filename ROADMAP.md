@@ -627,11 +627,14 @@ hook 输入法进程读写输入框（微信场景唯一可行方案，见 READM
 - [ ] 端到端实测 v7.16 ~ v7.19：时间提示词开 / 关两态下的改写对比；
       确认模型真的会引用「现在的时间」（A/B 已证 ✅，待聊天窗口实测）；
       其余沿用 v7.15 的未测项
-- [x] 推 GitHub v7.16 ~ v7.19（User said m09601「没问题了，你直接推送」）
-      `main` = `039cb6c`，tag `v7.16` / `v7.17` / `v7.18` / `v7.19` 同 commit；
-      Release id 分别为 `409422994` / `409422979` / `409422958` / `409422930`，
-      附件为 `releases/wechat-catgirl-input-v7.1{6,7,8,9}.apk`，
-      `curl -L` 回下 v7.19 比对 SHA-256 一致
+- [x] 推 GitHub v7.19（User said m09601「没问题了，你直接推送」）
+      `main` = `039cb6c`（代码）→ `d0de11e`（ROADMAP 记录）→ `0478cc6`（撤下中间产物），
+      tag `v7.19`；Release id `409422930`，附件 `releases/wechat-catgirl-input-v7.19.apk`
+      （209769 字节，digest `sha256:ecfcce2f…308557`），`curl -L` 回下比对一致
+- [x] 只保留 v7.19 的发布产物（User said m09647「你直接上传 V7.19 的，其他的不用」）：
+      删除 Release / tag / 仓库内 APK 的 v7.16、v7.17、v7.18 三套中间产物
+      （原 release id 分别 `409422994` / `409422979` / `409422958`，删除均返回 204）；
+      `releases/` 下只留 v6.0 / v7.7 / v7.12 / v7.13 / v7.15 / v7.19
 - [x] 用户确认 v7.15（User said m08859「用着没问题，你直接推送」）
 - [x] 推 GitHub：`main` = `e13d03f`（v7.15 代码），tag `v7.15` 同 commit
 - [x] GitHub **Release** v7.15 已建：release id `409009436`，asset id `628213775`，
