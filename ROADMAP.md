@@ -661,6 +661,10 @@ hook 输入法进程读写输入框（微信场景唯一可行方案，见 READM
 
 ## 待办
 
+- [x] 推 GitHub v7.20（User said m09939「没问题了，直接推」）
+      `main` = `acd25b2`，tag `v7.20`；Release id `409503853`，asset id `630101677`，
+      附件 `releases/wechat-catgirl-input-v7.20.apk`（209769 字节，
+      digest `sha256:15e2a13a…142d3a`），`curl -L` 回下比对一致
 - [ ] 端到端实测 v7.20：QQ 里打 `@昵称 你好。`，确认 `@昵称` 原样、后文正常喵化、
       且 `LLM 已改写` 的输入里不含 @段；顺便复测零宽机制未被破坏
 - [x] 用户确认 v7.16「时间提示词」开关生效（User said m09246「OK，我现在随便转了几个」）
