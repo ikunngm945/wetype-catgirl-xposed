@@ -109,6 +109,104 @@ public final class Cat {
     }
 
     /**
+     * 「@ 提到某人」的保护段：从 {@code @} 起，到下一个空白为止 —— 连同后面的
+     * 空白一起带走（否则会落下一个孤零零的空格，被当成自由文字送去问模型）。
+     *
+     * <p>用户需求（m09671）：{@code @} 后面的内容原样保留，不做人称替换、
+     * 不加句末后缀、不送模型 —— 昵称里常有「我」「你」这类字，被替换就成了
+     * 别人的名字。与零宽标记不同，{@code @} 段天生自带辨识特征（开头就是
+     * {@code @}），所以不必再套零宽标记，每轮重新扫一遍即可。
+     *
+     * @return 保护段的结束下标（不含）；没有 {@code @} 返回 -1
+     */
+    private static int atEnd(String s, int at) {
+        if (s == null || at < 0 || at >= s.length() || s.charAt(at) != '@') {
+            return -1;
+        }
+        int i = at + 1;
+        while (i < s.length() && !isAtBreak(s.charAt(i))) {
+            i++;
+        }
+        while (i < s.length() && isAtBreak(s.charAt(i))) {
+            i++;
+        }
+        return i;
+    }
+
+    /** @ 保护段的终止字符：空白或换行。 */
+    private static boolean isAtBreak(char c) {
+        return isBlank(c) || c == '\n' || c == '\r';
+    }
+
+    /**
+     * 这个 {@code @} 是不是「提到某人」的开头。
+     *
+     * <p>用排除法：前面紧挨着「词的一部分」（字母、数字、汉字、假名、谚文、
+     * {@code ._-+%}）的 {@code @} 属于邮箱 / 网址，不算提到人
+     * （{@code a@b.com} 不能把 {@code b.com} 锁住）；行首、空白之后、
+     * 标点（含全角标点）之后都算。
+     */
+    private static boolean isMention(String s, int at) {
+        if (s == null || at < 0 || at >= s.length() || s.charAt(at) != '@') {
+            return false;
+        }
+        if (at == 0) {
+            return true;
+        }
+        char p = s.charAt(at - 1);
+        if ((p >= 'a' && p <= 'z') || (p >= 'A' && p <= 'Z') || (p >= '0' && p <= '9')) {
+            return false;
+        }
+        // 汉字 / 假名 / 谚文：视作词的一部分
+        if ((p >= 0x3040 && p <= 0x30FF) || (p >= 0x3400 && p <= 0x9FFF)
+                || (p >= 0xAC00 && p <= 0xD7AF)) {
+            return false;
+        }
+        // 邮箱 / 网址里 @ 前后的连接符
+        return "._-+%".indexOf(p) < 0;
+    }
+
+    /** 从 {@code from} 起找下一个 {@code @} 保护段起点；没有返回 -1。 */
+    private static int indexOfAt(String s, int from) {
+        if (s == null) {
+            return -1;
+        }
+        int i = s.indexOf('@', from);
+        while (i >= 0) {
+            if (isMention(s, i)) {
+                return i;
+            }
+            i = s.indexOf('@', i + 1);
+        }
+        return -1;
+    }
+
+    /** 去掉 {@code @} 保护段（含其后空白），只留下真正要改写的自由文字。 */
+    private static String stripAt(String s) {
+        int a = indexOfAt(s, 0);
+        if (a < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        while (i < s.length()) {
+            int p = indexOfAt(s, i);
+            if (p < 0) {
+                sb.append(s.substring(i));
+                break;
+            }
+            sb.append(s.substring(i, p));
+            int e = atEnd(s, p);
+            if (e <= p) {
+                sb.append(s.substring(p));
+                break;
+            }
+            i = e;
+        }
+        return sb.toString();
+    }
+
+    /**
      * 认定「这段是我们自己产出过的改写正文」所需的最短长度。
      *
      * <p>太短的串（「喵」「哦」）到处都是，按内容比对会误伤用户原文，
@@ -205,6 +303,25 @@ public final class Cat {
             return;
         }
         int at = firstOutputAt(outs, seg);
+        int atSign = indexOfAt(seg, 0);
+        // @ 保护段优先切出来：它既不进 sb 的改写流程，也不进 free —
+        // free 是用来判断「这句拿到改写结果了没」的，混进受保护内容会导致
+        // 那段永远查不到结果、每轮都追加一次失败提示。
+        if (atSign >= 0 && (at < 0 || atSign < at)) {
+            if (atSign > 0) {
+                appendFree(sb, free, outs, seg.substring(0, atSign), loose);
+            }
+            int e = atEnd(seg, atSign);
+            if (e <= atSign) {
+                sb.append(seg.substring(atSign));
+                return;
+            }
+            sb.append(seg.substring(atSign, e));
+            if (e < seg.length()) {
+                appendFree(sb, free, outs, seg.substring(e), loose);
+            }
+            return;
+        }
         if (at < 0) {
             free.append(seg);
             sb.append(loose ? transformLoosePart(seg) : transformPart(seg));
@@ -1102,7 +1219,8 @@ public final class Cat {
         }
         // 去掉混在自由文字里的「自己产出过的改写正文」——宿主吃掉行尾零宽后
         // 那段旧文字会落在这里，不认出来就会整段重新送模型（实测多花 4.2 秒）。
-        return stripErrors(stripOutputs(outs, sb.toString()));
+        // @ 保护段同理：它不该进模型，也不该被当成「还没拿到结果」的自由文字。
+        return stripAt(stripErrors(stripOutputs(outs, sb.toString())));
     }
 
     /**
