@@ -913,6 +913,22 @@ public final class ConfigUI {
                             }
                         }));
 
+                inner.addView(buildSwitchRow(a, "时间提示词（告诉模型现在几点）",
+                        Llm.timeEnabled(), new SwitchHandler() {
+                            @Override
+                            public void onSet(boolean v) {
+                                Llm.save(Llm.enabled(), Llm.preEnabled(),
+                                        Llm.cacheEnabled(), Llm.url(), Llm.KEEP_KEY,
+                                        Llm.model(), Llm.temp(), Llm.maxTokens(),
+                                        Llm.maxInput(), Llm.level(), Llm.waitMs(), v);
+                                run();
+                            }
+                        }));
+                inner.addView(note(a, d, "打开后把当前时间展开进提示词的 {当前时间} "
+                        + "（形如 2026-10-10 周六 22:39，示例见默认提示词）。"
+                        + "关掉则含 {当前时间} 的整行会被删掉；"
+                        + "若你的提示词里没写这个占位符，打开时会自动补一行。"));
+
                 TextView tip = new TextView(a);
                 tip.setTextSize(11);
                 tip.setTextColor(Color.parseColor("#888888"));
@@ -1040,7 +1056,8 @@ public final class ConfigUI {
                 pLab.setTextColor(Color.parseColor("#111111"));
                 pLab.setText("\n提示词（改完点「保存提示词」立刻生效）\n"
                         + "占位符：{替换规则} 会自动展开成文字替换清单，"
-                        + "{句末后缀} 展开成后缀文字。");
+                        + "{句末后缀} 展开成后缀文字，"
+                        + "{当前时间} 展开成当前时间（由上面的「时间提示词」开关控制）。");
                 inner.addView(pLab);
 
                 final EditText pInput = new EditText(a);

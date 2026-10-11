@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.dsh.qqcatime"
-    android:versionCode="715"
-    android:versionName="7.15">
+    android:versionCode="719"
+    android:versionName="7.19">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="33" />
-    <application android:label="微信输入法猫娘模块" android:allowBackup="false" android:supportsRtl="true">
+    <application android:label="微信输入法猫娘模块" android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:supportsRtl="true">
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription"
             android:value="在微信、QQ 里聊天时自动把“我”换成“本喵”、“你”换成“主人”，句末加“喵”并追加随机颜文字。支持语音输入自动发送。仅作用于微信输入法。" />

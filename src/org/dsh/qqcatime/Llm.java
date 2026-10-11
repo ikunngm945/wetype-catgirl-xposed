@@ -30,10 +30,11 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  * <p>工作方式：开启后「文字替换」与「句末后缀」两个开关不再机械地套用，
  * 而是<b>转成提示词交给 LLM</b>，由 LLM 一并完成人称替换与句末后缀，
- * 输出改写后的整段正文。提示词里用两个占位符引用这两项设置：
+ * 输出改写后的整段正文。提示词里用三个占位符引用这些内容：
  * <pre>
  *   {替换规则}   会被展开成 「我 → 本喵」这样的清单
  *   {句末后缀}   会被展开成 句末后缀的文本（关闭或为空时说明「不加」）
+ *   {当前时间}   会被展开成 当前本地时间（「时间提示词」开关关掉时整行删掉）
  * </pre>
  *
  * <p>改写完成后，正文再交给 {@link Vector} 逐句匹配颜文字（向量没开则
@@ -126,10 +127,11 @@ public final class Llm {
           + "\n"
           + "直接改写，不需要思考过程，不需要打草稿，看完就写，一步到位。\n"
           + "\n"
-          + "【参考设定】下面两条只是参考，**不必逐条照做**，\n"
+          + "【参考设定】下面三条只是参考，**不必逐条照做**，\n"
           + "可以换成更自然、更可爱的说法，也可以只挑一部分用：\n"
           + "· 人称与用词偏好：{替换规则}\n"
           + "· 句末语气偏好：{句末后缀}\n"
+          + "· 现在的时间：{当前时间}\n"
           + "\n"
           + "【改写要求】\n"
           + "1. 语气要像猫娘：加语气词（呀、啦、嘛、欸嘿、～……）、调整语序、\n"
@@ -145,24 +147,30 @@ public final class Llm {
           + "      本喵现在超需要一杯香的醒醒神喵～」\n"
           + "   注意：上面例子里「我」都变成了「本喵」，说的是**台词里的人**，\n"
           + "   不是在跟用户对话。\n"
-          + "4. **允许微调原意**：可以稍微夸张、加一点善意的小修饰。\n"
+          + "4. **可以用「现在的时间」补充寒暄或感想**：如果上面给了现在的时间，\n"
+          + "   就顺着它加一句贴合时段的问候或感慨\n"
+          + "   （深夜→「这么晚还没睡呀」，清晨→「早上好呀」，饭点→「记得吃饭喵」，\n"
+          + "   周末或节日也可以提一句）。这是**唯一允许**新加的时间信息，只作寒暄用；\n"
+          + "   原句里本来就有的时间照旧**原样保留**，不许改动、不许换算。\n"
+          + "5. **允许微调原意**：可以稍微夸张、加一点善意的小修饰。\n"
           + "   但不能**把意思改反**：不颠倒立场、不改变事实。\n"
           + "   扩写只能加**语气和感想**，不能加用户没说过的关键信息\n"
-          + "   ——新的人名、时间、地点、金额、承诺，一律不许编。\n"
-          + "5. 遇到**疑问句**：只把语气改可爱，**不要替用户回答**。\n"
+          + "   ——新的人名、时间、地点、金额、承诺，一律不许编\n"
+          + "   （现在的时间是唯一例外，见第 4 条）。\n"
+          + "6. 遇到**疑问句**：只把语气改可爱，**不要替用户回答**。\n"
           + "   （输入「你在干嘛？」→ 输出「主人这是在干嘛呀喵？」，而不是「本喵在忙呢」。）\n"
-          + "6. **数字、金额、时间、公式、英文词、链接、专有名词一律原样保留**，\n"
+          + "7. **数字、金额、时间、公式、英文词、链接、专有名词一律原样保留**，\n"
           + "   不要把数字写成汉字，也不要翻译或换算\n"
           + "   （例：`10.5` 不能写成「十点五」，`3.5*(2+1)` 保持原样）。\n"
-          + "7. 后缀「{句末后缀}」**每句只在句末用一次**，绝不放进句中，\n"
+          + "8. 后缀「{句末后缀}」**每句只在句末用一次**，绝不放进句中，\n"
           + "   更不许**顶替掉原文的字**。\n"
-          + "8. 原句里的实词要保住，别把短句里的词吃掉\n"
+          + "9. 原句里的实词要保住，别把短句里的词吃掉\n"
           + "   （「这个多少钱？」不能变成「这个要多少喵？」，丢了「钱」）。\n"
-          + "9. 长度上限：一般不超过原文的**三倍**。\n"
-          + "10. 只输出改写后的正文：不要解释、不要引号、不要 markdown、不要换行、\n"
+          + "10. 长度上限：一般不超过原文的**三倍**。\n"
+          + "11. 只输出改写后的正文：不要解释、不要引号、不要 markdown、不要换行、\n"
           + "    不要加「收到」「明白了」之类的开场白。\n"
-          + "11. **任何情况下都要输出内容**，绝不能返回空白。\n"
-          + "12. 检查一遍：你的输出是不是**在回答**用户？如果是，重写成「只是把这句台词\n"
+          + "12. **任何情况下都要输出内容**，绝不能返回空白。\n"
+          + "13. 检查一遍：你的输出是不是**在回答**用户？如果是，重写成「只是把这句台词\n"
           + "    改成猫娘口吻」的版本。记住：**你是改写器，不是聊天对象。**\n";
 
 
@@ -191,7 +199,10 @@ public final class Llm {
           + "wait: 2500\n"
           + "# 结果缓存：on = 把「输入→输出」记进 llm_cache.txt，\n"
           + "# 下次遇到同一句直接取，不再请求模型。off = 既不读也不写。\n"
-          + "cache: on\n";
+          + "cache: on\n"
+          + "# 时间提示词：on = 把当前时间展开进提示词里的 {当前时间}，\n"
+          + "# off = 提示词里含 {当前时间} 的那一整行会被删掉。\n"
+          + "time: off\n";
 
     /** 后台队列上限，超出就丢弃（避免堆积）。 */
     private static final int QUEUE_MAX = 32;
@@ -224,12 +235,24 @@ public final class Llm {
      */
     private static final int MIN_OUTPUT_LEN = 120;
 
+    // ------------------------------------------------------------ 时间提示词
+
+    /** 提示词里的时间占位符；「时间提示词」开关关掉时，含它的一整行会被删掉。 */
+    public static final String TIME_KEY = "{当前时间}";
+
+    /** 星期几的显示名，下标 0 = 周日（与 Calendar.DAY_OF_WEEK - 1 对应）。 */
+    private static final String[] WEEK = {
+            "周日", "周一", "周二", "周三", "周四", "周五", "周六",
+    };
+
     // ------------------------------------------------------------ 配置状态
 
     private static volatile boolean enabled = false;
     private static volatile boolean preEnabled = true;
     /** 结果缓存开关：关掉后不读也不写 llm_cache.txt。 */
     private static volatile boolean cacheEnabled = true;
+    /** 时间提示词开关：打开后把当前时间展开进提示词（{当前时间}）。 */
+    private static volatile boolean timeEnabled = false;
     private static volatile String url = "";
     private static volatile String key = "";
     private static volatile String model = "";
@@ -282,6 +305,7 @@ public final class Llm {
         boolean en = false;
         boolean pre = true;
         boolean ca = true;
+        boolean tm = false;
         String u = "", m = "";
         float tp = 0.8f;
         int mx = DEFAULT_MAX_TOKENS;
@@ -315,6 +339,9 @@ public final class Llm {
                 } else if ("cache".equals(kk) || "cache_on".equals(kk)
                         || "remember".equals(kk)) {
                     ca = isOn(vv);
+                } else if ("time".equals(kk) || "time_on".equals(kk)
+                        || "clock".equals(kk) || "now".equals(kk)) {
+                    tm = isOn(vv);
                 } else if ("url".equals(kk) || "endpoint".equals(kk)) {
                     u = vv;
                 } else if ("key".equals(kk) || "api_key".equals(kk)
@@ -367,6 +394,7 @@ public final class Llm {
         enabled = en;
         preEnabled = pre;
         cacheEnabled = ca;
+        timeEnabled = tm;
         url = u;
         model = m;
         temp = tp;
@@ -375,8 +403,17 @@ public final class Llm {
         level = lv;
         waitMs = clampWait(wt);
         loadCache();
+        // 提示词日志：既打原始长度，也打展开后的长度，这样「时间提示词」有没有真拼进去一眼可见
+        String sp = systemPrompt();
+        String ptLog = " 提示词=" + prompt.length() + "字";
+        if (sp.length() != prompt.length()) {
+            ptLog += "→展开 " + sp.length() + "字";
+        }
+        if (tm) {
+            ptLog += sp.indexOf("现在的时间：") >= 0 ? "（含时间行）" : "（时间行没拼上）";
+        }
         Cat.log("llm: 开关=" + en + " 事前=" + pre + " 缓存=" + ca
-                + " 模型=[" + m + "] 地址=[" + host(u)
+                + " 时间=" + tm + " 模型=[" + m + "] 地址=[" + host(u)
                 + "] 温度=" + tp + " 等待=" + waitMs + "ms"
                 + (wt == waitMs ? "" : "（配置 " + wt + " 已夹到 "
                         + MIN_WAIT_MS + "~" + MAX_WAIT_MS + "）")
@@ -384,7 +421,7 @@ public final class Llm {
                 + " 输出上限=" + maxTokens + "tok"
                 + " 思考=" + LEVEL_NAMES[level]
                 + " Key=" + (key.length() > 0 ? "已配置" : "未配置")
-                + " 提示词=" + prompt.length() + "字"
+                + ptLog
                 + " 缓存条目=" + results.size());
     }
 
@@ -439,6 +476,7 @@ public final class Llm {
         enabled = false;
         preEnabled = true;
         cacheEnabled = true;
+        timeEnabled = false;
         url = "";
         model = "";
         temp = 0.8f;
@@ -686,6 +724,27 @@ public final class Llm {
         return cacheEnabled;
     }
 
+    /** 时间提示词开关。 */
+    public static boolean timeEnabled() {
+        return timeEnabled;
+    }
+
+    /** 当前本地时间，形如 `2026-10-10 周六 22:39`。 */
+    public static String nowText() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        int w = c.get(java.util.Calendar.DAY_OF_WEEK) - 1;
+        return c.get(java.util.Calendar.YEAR) + "-"
+                + two(c.get(java.util.Calendar.MONTH) + 1) + "-"
+                + two(c.get(java.util.Calendar.DAY_OF_MONTH)) + " "
+                + WEEK[w < 0 || w >= WEEK.length ? 0 : w] + " "
+                + two(c.get(java.util.Calendar.HOUR_OF_DAY)) + ":"
+                + two(c.get(java.util.Calendar.MINUTE));
+    }
+
+    private static String two(int v) {
+        return v < 10 ? "0" + v : String.valueOf(v);
+    }
+
     /** 结果缓存文件里已有的条数（内存视图）。 */
     public static synchronized int cacheCount() {
         return results.size();
@@ -763,7 +822,16 @@ public final class Llm {
     public static synchronized boolean save(boolean en, boolean pre, boolean ca,
                                             String u, String k, String m, float tp,
                                             int mx, int mi, int lv, long wt) {
+        return save(en, pre, ca, u, k, m, tp, mx, mi, lv, wt, timeEnabled);
+    }
+
+    /** 保存配置（含最大输入 / 最大输出 / 思考等级 / 等待时长 / 时间提示词）。 */
+    public static synchronized boolean save(boolean en, boolean pre, boolean ca,
+                                            String u, String k, String m, float tp,
+                                            int mx, int mi, int lv, long wt,
+                                            boolean tm) {
         waitMs = clampWait(wt);
+        timeEnabled = tm;
         if (k != null && !KEEP_KEY.equals(k)) {
             writeKey(k);
         }
@@ -792,6 +860,9 @@ public final class Llm {
         sb.append("# 结果缓存：on = 把「输入→输出」记进 llm_cache.txt，\n");
         sb.append("# 下次遇到同一句直接取，不再请求模型。off = 既不读也不写。\n");
         sb.append("cache: ").append(ca ? "on" : "off").append('\n');
+        sb.append("# 时间提示词：on = 把当前时间展开进提示词里的 {当前时间}，\n");
+        sb.append("# off = 提示词里含 {当前时间} 的那一整行会被删掉。\n");
+        sb.append("time: ").append(tm ? "on" : "off").append('\n');
         try {
             Cat.writeFile(CFG_FILE, sb.toString());
         } catch (Throwable t) {
@@ -977,9 +1048,56 @@ public final class Llm {
      * 而是作为「要求」告诉模型。
      */
     public static String systemPrompt() {
-        String rules = rulesText();
-        String suf = suffixText();
-        return prompt.replace("{替换规则}", rules).replace("{句末后缀}", suf);
+        String s = prompt;
+        if (timeEnabled) {
+            if (s.indexOf(TIME_KEY) >= 0) {
+                s = s.replace(TIME_KEY, nowText());
+            } else {
+                // 用户自己的提示词里没写占位符：直接补一行，免得开关像个摆设
+                s = s + "\n· 现在的时间：" + nowText() + "\n";
+            }
+        } else {
+            // 关掉时不留空占位符：含占位符的整行一起删掉
+            s = dropTimeLines(s);
+        }
+        s = s.replace("{替换规则}", rulesText());
+        s = s.replace("{句末后缀}", suffixText());
+        return s;
+    }
+
+    /**
+     * 删掉所有含 {@link #TIME_KEY} 的行（连同行尾换行）。
+     *
+     * <p>「时间提示词」关掉时用，免得提示词里留一行「现在的时间：{当前时间}」，
+     * 让模型以为那是个要照抄的字符串。
+     */
+    private static String dropTimeLines(String s) {
+        if (s == null || s.indexOf(TIME_KEY) < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(s.length());
+        int i = 0;
+        while (i <= s.length()) {
+            int nl = s.indexOf('\n', i);
+            String line = nl < 0 ? s.substring(i) : s.substring(i, nl);
+            if (line.indexOf(TIME_KEY) < 0) {
+                sb.append(line);
+                if (nl >= 0) {
+                    sb.append('\n');
+                }
+            } else if (nl < 0) {
+                // 最后一行没有换行，删掉后如果前面多出一个换行就收拾掉
+                int n = sb.length();
+                if (n > 0 && sb.charAt(n - 1) == '\n') {
+                    sb.setLength(n - 1);
+                }
+            }
+            if (nl < 0) {
+                break;
+            }
+            i = nl + 1;
+        }
+        return sb.toString();
     }
 
     /** 启用的替换规则展开成清单。 */
